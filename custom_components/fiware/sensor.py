@@ -17,7 +17,8 @@ from . import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-FIELD_MAP_AIR = {
+# English field maps
+FIELD_MAP_AIR_EN = {
     "pm25": {"name": "PM2.5", "unit": "µg/m³"},
     "pm10": {"name": "PM10", "unit": "µg/m³"},
     "no2": {"name": "NO₂", "unit": "µg/m³"},
@@ -27,13 +28,42 @@ FIELD_MAP_AIR = {
     "main_pollutant": {"name": "Main Pollutant", "unit": None},
 }
 
-FIELD_MAP_WEATHER = {
+FIELD_MAP_WEATHER_EN = {
     "temperature": {"name": "Temperature", "unit": UnitOfTemperature.CELSIUS},
     "relativeHumidity": {"name": "Humidity", "unit": PERCENTAGE},
     "windSpeed": {"name": "Wind Speed", "unit": "km/h"},
     "precipitation": {"name": "Precipitation", "unit": "mm"},
     "uVIndexMax": {"name": "UV Index", "unit": None},
 }
+
+# Portuguese field maps
+FIELD_MAP_AIR_PT = {
+    "pm25": {"name": "PM2.5", "unit": "µg/m³"},
+    "pm10": {"name": "PM10", "unit": "µg/m³"},
+    "no2": {"name": "NO₂", "unit": "µg/m³"},
+    "o3": {"name": "O₃", "unit": "µg/m³"},
+    "co": {"name": "CO", "unit": "µg/m³"},
+    "aqi": {"name": "Índice de Qualidade do Ar", "unit": None},
+    "main_pollutant": {"name": "Poluente Principal", "unit": None},
+}
+
+FIELD_MAP_WEATHER_PT = {
+    "temperature": {"name": "Temperatura", "unit": UnitOfTemperature.CELSIUS},
+    "relativeHumidity": {"name": "Humidade", "unit": PERCENTAGE},
+    "windSpeed": {"name": "Velocidade do Vento", "unit": "km/h"},
+    "precipitation": {"name": "Precipitação", "unit": "mm"},
+    "uVIndexMax": {"name": "Índice UV", "unit": None},
+}
+
+
+def _get_field_maps(hass: HomeAssistant) -> tuple[dict, dict]:
+    """Get the appropriate field maps based on Home Assistant language."""
+    language = hass.config.language
+    
+    if language.startswith("pt"):
+        return FIELD_MAP_AIR_PT, FIELD_MAP_WEATHER_PT
+    else:
+        return FIELD_MAP_AIR_EN, FIELD_MAP_WEATHER_EN
 
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback):
@@ -43,6 +73,9 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
     if not coordinator or not coordinator.data:
         _LOGGER.warning("No data available for FIWARE entry %s", entry.entry_id)
 
+    # Get field maps based on Home Assistant language
+    field_map_air, field_map_weather = _get_field_maps(hass)
+
     entities: list[SensorEntity] = []
 
     # Create entities from coordinator data structure (airquality)
@@ -51,7 +84,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
         name = ent.get("name")
         data = ent.get("data", {})
         # Add pollutant sensors
-        for field, meta in FIELD_MAP_AIR.items():
+        for field, meta in field_map_air.items():
             if field in data or field in ("aqi", "main_pollutant"):
                 entities.append(FiwareSensor(coordinator, eid, name, field, meta, ent))
 
@@ -60,7 +93,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
         eid = ent.get("entity_id")
         name = ent.get("name")
         data = ent.get("data", {})
-        for field, meta in FIELD_MAP_WEATHER.items():
+        for field, meta in field_map_weather.items():
             if field in data:
                 entities.append(FiwareSensor(coordinator, eid, name, field, meta, ent))
 
