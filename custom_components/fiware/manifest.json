@@ -1,0 +1,10 @@
+{
+  "domain": "fiware",
+  "name": "FIWARE",
+  "version": "0.1.0",
+  "documentation": "https://example.org/fiware",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": [],
+  "config_flow": true
+}
