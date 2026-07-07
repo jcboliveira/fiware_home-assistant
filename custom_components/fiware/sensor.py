@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import logging
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass, SensorDeviceClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -19,40 +19,182 @@ _LOGGER = logging.getLogger(__name__)
 
 # English field maps
 FIELD_MAP_AIR_EN = {
-    "pm25": {"name": "PM2.5", "unit": "µg/m³"},
-    "pm10": {"name": "PM10", "unit": "µg/m³"},
-    "no2": {"name": "NO₂", "unit": "µg/m³"},
-    "o3": {"name": "O₃", "unit": "µg/m³"},
-    "co": {"name": "CO", "unit": "µg/m³"},
-    "aqi": {"name": "AQI", "unit": None},
-    "main_pollutant": {"name": "Main Pollutant", "unit": None},
+    "pm25": {
+        "name": "PM2.5",
+        "unit": "µg/m³",
+        "device_class": "pm25",
+        "icon": "mdi:air-filter",
+        "state_class": True,
+    },
+    "pm10": {
+        "name": "PM10",
+        "unit": "µg/m³",
+        "device_class": "pm10",
+        "icon": "mdi:air-filter",
+        "state_class": True,
+    },
+    "no2": {
+        "name": "NO₂",
+        "unit": "µg/m³",
+        "device_class": "nitrogen_dioxide",
+        "icon": "mdi:molecule",
+        "state_class": True,
+    },
+    "o3": {
+        "name": "O₃",
+        "unit": "µg/m³",
+        "device_class": "ozone",
+        "icon": "mdi:weather-fog",
+        "state_class": True,
+    },
+    "co": {
+        "name": "CO",
+        "unit": "µg/m³",
+        "device_class": "carbon_monoxide",
+        "icon": "mdi:molecule-co",
+        "state_class": True,
+    },
+    "aqi": {
+        "name": "AQI",
+        "unit": None,
+        "device_class": "aqi",
+        "icon": "mdi:gauge",
+        "state_class": True,
+    },
+    "main_pollutant": {
+        "name": "Main Pollutant",
+        "unit": None,
+        "icon": "mdi:biohazard",
+        "state_class": False,
+    },
 }
 
 FIELD_MAP_WEATHER_EN = {
-    "temperature": {"name": "Temperature", "unit": UnitOfTemperature.CELSIUS},
-    "relativeHumidity": {"name": "Humidity", "unit": PERCENTAGE},
-    "windSpeed": {"name": "Wind Speed", "unit": "km/h"},
-    "precipitation": {"name": "Precipitation", "unit": "mm"},
-    "uVIndexMax": {"name": "UV Index", "unit": None},
+    "temperature": {
+        "name": "Temperature",
+        "unit": UnitOfTemperature.CELSIUS,
+        "device_class": "temperature",
+        "icon": "mdi:thermometer",
+        "state_class": True,
+    },
+    "relativeHumidity": {
+        "name": "Humidity",
+        "unit": PERCENTAGE,
+        "device_class": "humidity",
+        "icon": "mdi:water-percent",
+        "state_class": True,
+    },
+    "windSpeed": {
+        "name": "Wind Speed",
+        "unit": "km/h",
+        "device_class": "wind_speed",
+        "icon": "mdi:weather-windy",
+        "state_class": True,
+    },
+    "precipitation": {
+        "name": "Precipitation",
+        "unit": "mm",
+        "device_class": "precipitation",
+        "icon": "mdi:weather-rainy",
+        "state_class": True,
+    },
+    "uVIndexMax": {
+        "name": "UV Index",
+        "unit": None,
+        "device_class": "uv_index",
+        "icon": "mdi:weather-sunny-alert",
+        "state_class": True,
+    },
 }
 
 # Portuguese field maps
 FIELD_MAP_AIR_PT = {
-    "pm25": {"name": "PM2.5", "unit": "µg/m³"},
-    "pm10": {"name": "PM10", "unit": "µg/m³"},
-    "no2": {"name": "NO₂", "unit": "µg/m³"},
-    "o3": {"name": "O₃", "unit": "µg/m³"},
-    "co": {"name": "CO", "unit": "µg/m³"},
-    "aqi": {"name": "Índice de Qualidade do Ar", "unit": None},
-    "main_pollutant": {"name": "Poluente Principal", "unit": None},
+    "pm25": {
+        "name": "PM2.5",
+        "unit": "µg/m³",
+        "device_class": "pm25",
+        "icon": "mdi:air-filter",
+        "state_class": True,
+    },
+    "pm10": {
+        "name": "PM10",
+        "unit": "µg/m³",
+        "device_class": "pm10",
+        "icon": "mdi:air-filter",
+        "state_class": True,
+    },
+    "no2": {
+        "name": "NO₂",
+        "unit": "µg/m³",
+        "device_class": "nitrogen_dioxide",
+        "icon": "mdi:molecule",
+        "state_class": True,
+    },
+    "o3": {
+        "name": "O₃",
+        "unit": "µg/m³",
+        "device_class": "ozone",
+        "icon": "mdi:weather-fog",
+        "state_class": True,
+    },
+    "co": {
+        "name": "CO",
+        "unit": "µg/m³",
+        "device_class": "carbon_monoxide",
+        "icon": "mdi:molecule-co",
+        "state_class": True,
+    },
+    "aqi": {
+        "name": "AQI",
+        "unit": None,
+        "device_class": "aqi",
+        "icon": "mdi:gauge",
+        "state_class": True,
+    },
+    "main_pollutant": {
+        "name": "Poluente Principal",
+        "unit": None,
+        "icon": "mdi:biohazard",
+        "state_class": False,
+    },
 }
 
 FIELD_MAP_WEATHER_PT = {
-    "temperature": {"name": "Temperatura", "unit": UnitOfTemperature.CELSIUS},
-    "relativeHumidity": {"name": "Humidade", "unit": PERCENTAGE},
-    "windSpeed": {"name": "Velocidade do Vento", "unit": "km/h"},
-    "precipitation": {"name": "Precipitação", "unit": "mm"},
-    "uVIndexMax": {"name": "Índice UV", "unit": None},
+    "temperature": {
+        "name": "Temperatura",
+        "unit": UnitOfTemperature.CELSIUS,
+        "device_class": "temperature",
+        "icon": "mdi:thermometer",
+        "state_class": True,
+    },
+    "relativeHumidity": {
+        "name": "Humidade",
+        "unit": PERCENTAGE,
+        "device_class": "humidity",
+        "icon": "mdi:water-percent",
+        "state_class": True,
+    },
+    "windSpeed": {
+        "name": "Velocidade do Vento",
+        "unit": "km/h",
+        "device_class": "wind_speed",
+        "icon": "mdi:weather-windy",
+        "state_class": True,
+    },
+    "precipitation": {
+        "name": "Precipitação",
+        "unit": "mm",
+        "device_class": "precipitation",
+        "icon": "mdi:weather-rainy",
+        "state_class": True,
+    },
+    "uVIndexMax": {
+        "name": "Índice UV",
+        "unit": None,
+        "device_class": "uv_index",
+        "icon": "mdi:weather-sunny-alert",
+        "state_class": True,
+    },
 }
 
 
@@ -114,12 +256,16 @@ class FiwareSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"{station_name} {meta.get('name')}"
         self._attr_unique_id = f"fiware_{entity_id}_{field}"
         self._attr_native_unit_of_measurement = meta.get("unit")
+        self._attr_device_class = meta.get("device_class")
+        self._attr_icon = meta.get("icon")
         self._attr_device_info = {
             "identifiers": {(f"fiware", entity_id)},
             "name": station_name,
             "manufacturer": "Porto Digital",
             "model": "FIWARE",
         }
+        if meta.get("state_class"):
+            self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def native_value(self):

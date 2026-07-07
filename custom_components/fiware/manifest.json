@@ -5,6 +5,7 @@
   "documentation": "https://example.org/fiware",
   "requirements": [],
   "dependencies": [],
+  "iot_class": "cloud_polling",
   "codeowners": [],
   "config_flow": true
 }
