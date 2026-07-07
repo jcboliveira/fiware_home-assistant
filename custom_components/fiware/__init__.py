@@ -26,6 +26,7 @@ import unicodedata
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+import yaml
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
@@ -264,6 +265,96 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
 
     hass.data[DOMAIN].setdefault(entry.entry_id, {})
     hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
+
+    async def _create_zones_service(call) -> None:
+        """Service handler to generate a YAML file with zones for all stations."""
+        stations: dict[str, dict] = {}
+        user_radius = None
+        try:
+            user_radius = int(call.data.get("radius", 0)) if call and call.data else None
+            if user_radius == 0:
+                user_radius = None
+        except Exception:
+            user_radius = None
+
+        from decimal import Decimal, InvalidOperation
+
+        def _compute_radius(lat_val, lon_val) -> int:
+            """Estimate a sensible radius (meters) from coordinate precision."""
+            try:
+                lat_d = Decimal(str(lat_val)).normalize()
+                lon_d = Decimal(str(lon_val)).normalize()
+                # number of fractional digits equals -exponent for normalized Decimal
+                lat_frac = -lat_d.as_tuple().exponent if lat_d.as_tuple().exponent < 0 else 0
+                lon_frac = -lon_d.as_tuple().exponent if lon_d.as_tuple().exponent < 0 else 0
+                precision = min(lat_frac, lon_frac)
+            except (InvalidOperation, Exception):
+                precision = 2
+
+            # Map precision to radius (meters)
+            if precision >= 5:
+                return 50
+            if precision == 4:
+                return 100
+            if precision == 3:
+                return 250
+            if precision == 2:
+                return 1000
+            if precision == 1:
+                return 5000
+            return 10000
+
+        for kind in ("airquality", "weather"):
+            for ent in coordinator.data.get(kind, []):
+                eid = ent.get("entity_id")
+                name = ent.get("name")
+                lat = ent.get("lat")
+                lon = ent.get("lon")
+                if not lat or not lon:
+                    continue
+                # Use name as key to avoid duplicates
+                if name in stations:
+                    continue
+                stations[name] = {"name": name, "latitude": lat, "longitude": lon}
+
+        if not stations:
+            _LOGGER.info("FIWARE: no stations with coordinates found to create zones")
+            return
+
+        zones = []
+        for s in stations.values():
+            lat = s["latitude"]
+            lon = s["longitude"]
+            radius = user_radius if user_radius is not None else _compute_radius(lat, lon)
+            zones.append(
+                {
+                    "name": s["name"],
+                    "latitude": float(lat),
+                    "longitude": float(lon),
+                    "radius": int(radius),
+                    # use weather-related icon for meteorological stations
+                    "icon": "mdi:weather-partly-cloudy",
+                }
+            )
+
+        out_path = hass.config.path("fiware_zones.yaml")
+        try:
+            with open(out_path, "w", encoding="utf-8") as f:
+                yaml.dump(zones, f, sort_keys=False, allow_unicode=True)
+            _LOGGER.info("FIWARE: wrote %d zones to %s", len(zones), out_path)
+        except Exception as e:
+            _LOGGER.error("FIWARE: failed to write zones file: %s", e)
+            return
+
+        # Attempt to reload zones if the service exists
+        try:
+            await hass.services.async_call("zone", "reload", {})
+            _LOGGER.info("FIWARE: requested zone.reload")
+        except Exception:
+            _LOGGER.debug("FIWARE: zone.reload service not available or failed; you may need to restart HA or reload zones manually")
+
+    hass.services.async_register(DOMAIN, "create_zones", _create_zones_service)
+    # Debug dump service removed
 
     # Pre-import platform module in executor to avoid blocking the event loop
     try:
