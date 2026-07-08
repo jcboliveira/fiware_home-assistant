@@ -1,0 +1,11 @@
+create_zones:
+  description: "Generate a zones YAML file for all FIWARE stations with coordinates."
+  fields:
+    radius:
+      description: "Optional radius in metres to use for all generated zones. If omitted, radius is estimated from coordinate precision."
+      example: 100
+      required: false
+      selector:
+        number:
+          min: 0
+          step: 1
