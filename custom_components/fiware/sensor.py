@@ -305,124 +305,44 @@ class FiwareSensor(CoordinatorEntity, SensorEntity):
         if meta.get("state_class"):
             self._attr_state_class = SensorStateClass.MEASUREMENT
 
-
-class FiwareStationOverview(CoordinatorEntity, SensorEntity):
-    """Overview sensor representing a station with aggregated attributes."""
-
-    def __init__(self, coordinator, entity_id: str, station_name: str, ent_wrap: dict):
-        super().__init__(coordinator)
-        self._entity_id = entity_id
-        self._station_name = station_name
-        self._ent_wrap = ent_wrap
-        self._attr_name = f"{station_name} Overview"
-        self._attr_unique_id = f"fiware_{entity_id}_overview"
-        self._attr_icon = "mdi:weather-station"
-        self._attr_should_poll = False
-
     @property
     def native_value(self):
-        # Use last_seen ISO or 'unknown'
-        last = self._get_last_seen_iso()
-        return last or "unknown"
-
-    @property
-    def latitude(self) -> float | None:
-        try:
-            return float(self._ent_wrap.get("lat")) if self._ent_wrap.get("lat") is not None else None
-        except Exception:
-            return None
-
-    @property
-    def longitude(self) -> float | None:
-        try:
-            return float(self._ent_wrap.get("lon")) if self._ent_wrap.get("lon") is not None else None
-        except Exception:
-            return None
-
-    @property
-    def extra_state_attributes(self):
-        # expose a summary of measurements as attributes
-        attrs: dict[str, Any] = {
-            "entity_id": self._entity_id,
-            "name": self._station_name,
-            "last_seen": self._get_last_seen_iso(),
-            "latitude": self._ent_wrap.get("lat"),
-            "longitude": self._ent_wrap.get("lon"),
-        }
-
-        # add measurements from the coordinator's entry
         collections = self.coordinator.data.get(self._ent_wrap.get("kind"), [])
         for e in collections:
             if e.get("entity_id") == self._entity_id:
-                data = e.get("data", {}) or {}
-                # flatten simple measurements
-                for k, v in data.items():
-                    try:
-                        # v may be a dict with 'value'
-                        if isinstance(v, dict) and "value" in v:
-                            attrs[k] = v.get("value")
-                        else:
-                            attrs[k] = v
-                    except Exception:
-                        continue
-                # include computed aqi/main_pollutant
-                if e.get("aqi") is not None:
-                    attrs["aqi"] = e.get("aqi")
-                if e.get("main_pollutant") is not None:
-                    attrs["main_pollutant"] = e.get("main_pollutant")
-                break
-
-        return attrs
-
-    def _get_last_seen_iso(self) -> str | None:
-        # reuse FiwareSensor helper logic by inspecting ent_wrap data
-        for key in ("dateObserved", "observedAt", "last_update", "timeObserved"):
-            if self._ent_wrap.get(key):
-                return self._ent_wrap.get(key)
-        return None
-
-    @property
-    def native_value(self):
-        # Data is kept in the wrapper stored at creation; coordinator keeps entire lists updated
-        # Find the current entity in coordinator data
-        collections = self.coordinator.data.get(self._ent_wrap.get("kind"), [])
-        for e in collections:
-            if e.get("entity_id") == self._entity_id:
-                data = e.get("data", {})
-                # Special computed fields
                 if self._field == "aqi":
                     return e.get("aqi")
                 if self._field == "main_pollutant":
                     return e.get("main_pollutant")
 
-                if self._field in data:
-                    val = data.get(self._field, {}).get("value")
-                    if self._field == "windSpeed":
-                        try:
-                            return round(val * 3.6, 1)
-                        except Exception:
-                            return val
-                    if self._field == "relativeHumidity":
-                        try:
-                            if val <= 1:
-                                return round(val * 100, 1)
-                        except Exception:
-                            pass
-                    return val
+                data = e.get("data", {}) or {}
+                if self._field not in data:
+                    return None
 
+                val = data.get(self._field)
+                if isinstance(val, dict):
+                    val = val.get("value", val)
+
+                if self._field == "windSpeed":
+                    try:
+                        return round(float(val) * 3.6, 1)
+                    except Exception:
+                        return val
+
+                if self._field == "relativeHumidity":
+                    try:
+                        if float(val) <= 1:
+                            return round(float(val) * 100, 1)
+                    except Exception:
+                        pass
+                return val
         return None
 
     @property
     def available(self) -> bool:
-        """Determine availability based on last seen timestamp.
-
-        If the last observed timestamp for this station is older than
-        `UNAVAILABLE_AFTER`, consider the entity unavailable.
-        """
         collections = self.coordinator.data.get(self._ent_wrap.get("kind"), [])
         for e in collections:
             if e.get("entity_id") == self._entity_id:
-                # Try several possible timestamp locations/keys
                 last_seen_iso = None
                 for key in ("dateObserved", "observedAt", "last_update", "timeObserved"):
                     if e.get(key):
@@ -442,31 +362,120 @@ class FiwareStationOverview(CoordinatorEntity, SensorEntity):
                         return self.coordinator.last_update_success
                     if last_seen is None:
                         return self.coordinator.last_update_success
-                    # Ensure timezone-aware
                     if last_seen.tzinfo is None:
                         last_seen = last_seen.replace(tzinfo=timezone.utc)
                     return (utcnow() - last_seen) <= self.UNAVAILABLE_AFTER
 
-                # If we have no timestamp, fallback to coordinator status
                 return self.coordinator.last_update_success
-
-        # If entity not found in coordinator data, mark unavailable
         return False
 
     @property
     def extra_state_attributes(self):
-        # expose coordinates and dateObserved
-        return {
+        attrs: dict[str, Any] = {
+            "entity_id": self._entity_id,
+            "name": self._station_name,
+            "raw_id": self._ent_wrap.get("raw_id"),
+            "dateObserved": self._ent_wrap.get("dateObserved"),
+        }
+        return attrs
+
+
+class FiwareStationOverview(CoordinatorEntity, SensorEntity):
+    """Overview sensor representing a station with aggregated attributes."""
+    UNAVAILABLE_AFTER = timedelta(days=1)
+
+    def __init__(self, coordinator, entity_id: str, station_name: str, ent_wrap: dict):
+        super().__init__(coordinator)
+        self._entity_id = entity_id
+        self._station_name = station_name
+        self._ent_wrap = ent_wrap
+        self._attr_name = f"{station_name} Overview"
+        self._attr_unique_id = f"fiware_{entity_id}_overview"
+        self._attr_icon = "mdi:weather-station"
+        self._attr_should_poll = False
+
+    @property
+    def native_value(self):
+        last = self._get_last_seen_iso()
+        return last or "unknown"
+
+    @property
+    def latitude(self) -> float | None:
+        try:
+            return float(self._ent_wrap.get("lat")) if self._ent_wrap.get("lat") is not None else None
+        except Exception:
+            return None
+
+    @property
+    def longitude(self) -> float | None:
+        try:
+            return float(self._ent_wrap.get("lon")) if self._ent_wrap.get("lon") is not None else None
+        except Exception:
+            return None
+
+    @property
+    def extra_state_attributes(self):
+        attrs: dict[str, Any] = {
             "entity_id": self._entity_id,
             "raw_id": self._ent_wrap.get("raw_id"),
+            "name": self._station_name,
             "dateObserved": self._ent_wrap.get("dateObserved"),
             "last_seen": self._get_last_seen_iso(),
             "latitude": self._ent_wrap.get("lat"),
             "longitude": self._ent_wrap.get("lon"),
         }
 
+        collections = self.coordinator.data.get(self._ent_wrap.get("kind"), [])
+        for e in collections:
+            if e.get("entity_id") == self._entity_id:
+                data = e.get("data", {}) or {}
+                for k, v in data.items():
+                    try:
+                        if isinstance(v, dict) and "value" in v:
+                            attrs[k] = v.get("value")
+                        else:
+                            attrs[k] = v
+                    except Exception:
+                        continue
+                if e.get("aqi") is not None:
+                    attrs["aqi"] = e.get("aqi")
+                if e.get("main_pollutant") is not None:
+                    attrs["main_pollutant"] = e.get("main_pollutant")
+                break
+        return attrs
+
+    @property
+    def available(self) -> bool:
+        collections = self.coordinator.data.get(self._ent_wrap.get("kind"), [])
+        for e in collections:
+            if e.get("entity_id") == self._entity_id:
+                last_seen_iso = None
+                for key in ("dateObserved", "observedAt", "last_update", "timeObserved"):
+                    if e.get(key):
+                        last_seen_iso = e.get(key)
+                        break
+                data = e.get("data", {}) or {}
+                if not last_seen_iso:
+                    for key in ("observedAt", "dateObserved", "last_update", "timeObserved"):
+                        if data.get(key):
+                            last_seen_iso = data.get(key)
+                            break
+
+                if last_seen_iso:
+                    try:
+                        last_seen = parse_datetime(last_seen_iso)
+                    except Exception:
+                        return self.coordinator.last_update_success
+                    if last_seen is None:
+                        return self.coordinator.last_update_success
+                    if last_seen.tzinfo is None:
+                        last_seen = last_seen.replace(tzinfo=timezone.utc)
+                    return (utcnow() - last_seen) <= self.UNAVAILABLE_AFTER
+
+                return self.coordinator.last_update_success
+        return False
+
     def _get_last_seen_iso(self) -> str | None:
-        """Return the ISO timestamp of the last seen measurement for this entity."""
         collections = self.coordinator.data.get(self._ent_wrap.get("kind"), [])
         for e in collections:
             if e.get("entity_id") == self._entity_id:
